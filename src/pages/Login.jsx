@@ -1,48 +1,61 @@
-import React from "react";
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { auth } from "../firebase"
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "firebase/auth";
+import { auth } from "../firebase";
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "../firebase";
 
 export default function Login() {
-    const handleSubmit = (e) => {
-        e.preventDefault();
+    const [error, setError] = useState('');
+    const navigate = useNavigate();
 
+    // Function to handle sign-in with Google
+    const handleSignIn = async () => {
+        const provider = new GoogleAuthProvider();
+        try {
+            const res = await signInWithPopup(auth, provider);
+            const user = res.user;
+            // Update user info in Firestore
+            await setDoc(doc(db, "users", user.uid), {
+                uid: user.uid,
+                name: user.displayName.toUpperCase(),
+                email: user.email,
+                profilePic: user.photoURL
+            }, { merge: true }); // Use merge option to update or set new data
 
-        const auth = auth();
-        signInWithPopup(auth, provider)
-        .then((result) => {
-            // This gives you a Google Access Token. You can use it to access the Google API.
-            const credential = GoogleAuthProvider.credentialFromResult(result);
-            const token = credential.accessToken;
-            // The signed-in user info.
-            const user = result.user;
-            // IdP data available using getAdditionalUserInfo(result)
-            // ...
-        }).catch((error) => {
-            // Handle Errors here.
-            const errorCode = error.code;
-            const errorMessage = error.message;
-            // The email of the user's account used.
-            const email = error.customData.email;
-            // The AuthCredential type that was used.
-            const credential = GoogleAuthProvider.credentialFromError(error);
-            // ...
+            await setDoc(doc(db, "userchat", user.uid), {})
+
+            navigate("/"); // Navigate to dashboard or home page after login
+        } catch (error) {
+            console.error(error);
+            setError(error.message); // Display error message to the user
+        }
+    };
+
+    // Effect hook to monitor authentication state change
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                navigate("/"); // Redirect to dashboard if already logged in
+            }
+            // User is signed out
+            // Handle session ending or redirect to login page if necessary
         });
-    }
+
+        return () => unsubscribe(); // Cleanup subscription on unmount
+    }, [navigate]);
+
     return (
-        <div className="formContainer bg-[#384d8e] h-[100vh] flex items-center justify-center">
-    <div className="formWrapper bg-white py-5 px-20 flex flex-col gap-2 items-center rounded-xl">
-        <span className="logo text-[#5d5b84] text-2xl font-bold">Chatify</span>
-        <span className="title text-[#5d5b8d] text-sm">login</span>
-        <form className="flex flex-col gap-4 w-80" onSubmit={handleSubmit}>
-            
-            <input className="p-3 border-b-2 border-b-gray-100" type="email" placeholder="email" name="" id="" />
-            <input className="p-3 border-b-2 border-b-gray-100" type="password" placeholder="password" name="" id="" />
-           
-            <button className="bg-[#374882] rounded-xl text-white p-2 font-bold cursor-pointer" type="submit">Login</button>
-        </form>
-        <span className="link">Don't have an account? Register</span>
-    </div>
-</div>
-    )
-    }
+        <div className="h-screen flex justify-center items-center bg-[#384d8e]">
+            <div className="text-center">
+                <h2 className="text-2xl font-bold text-white mb-4">Welcome to Chatify</h2>
+                {error && <p className="text-red-500">{error}</p>}
+                <button onClick={handleSignIn} className="bg-[#374882] rounded-xl text-white px-4 py-2 font-bold cursor-pointer">
+                    Login with Google
+                </button>
+            </div>
+        </div>
+    );
+}
+
     
